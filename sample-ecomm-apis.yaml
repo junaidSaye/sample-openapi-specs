@@ -1,0 +1,1136 @@
+openapi: 3.1.0
+info:
+  title: E-commerce API
+  version: 1.1.0
+  description: |
+    This is a realistic e-commerce API.
+    
+servers:
+  - url: https://api.ratl.app/ecommerce
+    description: Production server
+  - url: http://localhost:3001
+    description: Local development server
+tags:
+  - name: Authentication
+    description: |
+      User registration and authentication endpoints for both regular customers and administrators.
+      
+      **Important**: 
+      - `/auth/register` creates customer accounts (for order creation)
+      - `/auth/login` with customer credentials → user access (browse, cart, checkout, view orders)
+      - `/auth/login` with admin credentials → admin access (order processing, status updates)
+      - Admin accounts: register with email containing 'admin'
+  - name: Products
+    description: Product browsing and details
+  - name: Cart
+    description: Shopping cart management
+  - name: Checkout
+    description: Order checkout and creation
+  - name: Orders
+    description: Order management and history
+  - name: Addresses
+    description: Shipping address management
+  - name: Admin
+    description: |
+      Administrative endpoints for order management and processing.
+      
+      **Requires Admin Login**: All endpoints in this section require authentication with an admin account.
+      - Admin accounts have emails containing 'admin' (case-insensitive) OR are listed in ADMIN_EMAILS environment variable
+      - Use `/auth/login` with admin credentials to get an admin bearer token
+      - Admin endpoints allow order status updates following the workflow: pending → invoiced → dispatched → in_transit → out_for_delivery → delivered
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Product:
+      type: object
+      required: [id, name, price, stock, category]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+        name:
+          type: string
+          example: "Worry Management"
+        description:
+          type: string
+          example: "A book to help manage stress."
+        price:
+          type: number
+          format: float
+          example: 91.37
+        category:
+          type: string
+          example: "books"
+        image_url:
+          type: string
+          format: uri
+          example: "https://dummyimage.com/766x809"
+        stock:
+          type: integer
+          example: 94
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+      example:
+        id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+        name: "Worry Management"
+        description: "A book to help manage stress."
+        price: 91.37
+        category: "books"
+        image_url: "https://dummyimage.com/766x809"
+        stock: 94
+        created_at: "2025-05-31T10:00:00Z"
+        updated_at: "2025-05-31T10:00:00Z"
+    CartItem:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "c1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        user_id:
+          type: string
+          format: uuid
+          example: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        product_id:
+          type: string
+          format: uuid
+          example: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+      example:
+        id: "c1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+        quantity: 2
+    Address:
+      type: object
+      required: [id, user_id, line1, city, state, postal_code, country]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        user_id:
+          type: string
+          format: uuid
+          example: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        line1:
+          type: string
+          example: "123 Main St"
+        line2:
+          type: string
+          example: "Apt 4B"
+        city:
+          type: string
+          example: "Springfield"
+        state:
+          type: string
+          example: "IL"
+        postal_code:
+          type: string
+          example: "62701"
+        country:
+          type: string
+          example: "USA"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+      example:
+        id: "a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        line1: "123 Main St"
+        line2: "Apt 4B"
+        city: "Springfield"
+        state: "IL"
+        postal_code: "62701"
+        country: "USA"
+        created_at: "2025-05-31T10:00:00Z"
+        updated_at: "2025-05-31T10:00:00Z"
+    Order:
+      type: object
+      required: [id, user_id, items, total_amount, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        user_id:
+          type: string
+          format: uuid
+          example: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+          example:
+            - id: "c1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+              user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+              product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+              quantity: 2
+        total_amount:
+          type: number
+          example: 182.74
+        status:
+          type: string
+          enum: [pending, invoiced, dispatched, in_transit, out_for_delivery, delivered]
+          description: |
+            Order status follows a strict sequential flow:
+            - pending → invoiced → dispatched → in_transit → out_for_delivery → delivered
+          example: "pending"
+        invoice_number:
+          type: string
+          description: Optional invoice number (typically set when status changes to 'invoiced')
+          example: "INV-2025-001"
+        tracking_number:
+          type: string
+          description: Optional tracking number for shipment (typically set when status changes to 'dispatched')
+          example: "TRACK123456789"
+        invoiced_at:
+          type: string
+          format: date-time
+          description: Timestamp when order was invoiced (auto-set when status changes to 'invoiced')
+          example: "2025-05-31T11:00:00Z"
+        dispatched_at:
+          type: string
+          format: date-time
+          description: Timestamp when order was dispatched (auto-set when status changes to 'dispatched')
+          example: "2025-05-31T12:00:00Z"
+        in_transit_at:
+          type: string
+          format: date-time
+          description: Timestamp when order entered transit (auto-set when status changes to 'in_transit')
+          example: "2025-05-31T13:00:00Z"
+        out_for_delivery_at:
+          type: string
+          format: date-time
+          description: Timestamp when order went out for delivery (auto-set when status changes to 'out_for_delivery')
+          example: "2025-06-01T09:00:00Z"
+        delivered_at:
+          type: string
+          format: date-time
+          description: Timestamp when order was delivered (auto-set when status changes to 'delivered')
+          example: "2025-06-01T14:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+        status_history:
+          type: array
+          description: Array of status change history (included in order details response)
+          items:
+            $ref: '#/components/schemas/OrderStatusHistory'
+      example:
+        id: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        items:
+          - id: "c1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+            user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+            product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+            quantity: 2
+        total_amount: 182.74
+        status: "pending"
+        created_at: "2025-05-31T10:00:00Z"
+        updated_at: "2025-05-31T10:00:00Z"
+    OrderStatusHistory:
+      type: object
+      required: [id, order_id, new_status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "h1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        order_id:
+          type: string
+          format: uuid
+          example: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        old_status:
+          type: string
+          nullable: true
+          description: Previous status (null for initial status)
+          example: "pending"
+        new_status:
+          type: string
+          enum: [pending, invoiced, dispatched, in_transit, out_for_delivery, delivered]
+          example: "invoiced"
+        changed_by:
+          type: string
+          format: uuid
+          nullable: true
+          description: User ID who made the change (null for system changes)
+          example: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        notes:
+          type: string
+          nullable: true
+          description: Optional admin notes about the status change
+          example: "Invoice generated and sent to customer"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T11:00:00Z"
+      example:
+        id: "h1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        order_id: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        old_status: "pending"
+        new_status: "invoiced"
+        changed_by: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        notes: "Invoice generated"
+        created_at: "2025-05-31T11:00:00Z"
+    User:
+      type: object
+      required: [id, email, password]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        email:
+          type: string
+          format: email
+          description: |
+            User email address. 
+            - Customer emails: `user1@example.com`, `customer@example.com`
+            - Admin emails: `admin@example.com`, `admin.user@example.com` (contains 'admin' for admin privileges)
+          example: "user1@example.com"
+        password:
+          type: string
+          example: "$2b$10$hashedpassword"
+        name:
+          type: string
+          example: "User One"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+      examples:
+        customer_user:
+          summary: Customer User Example
+          description: Example of a regular customer account
+          value:
+            id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+            email: "user1@example.com"
+            password: "$2b$10$hashedpassword"
+            name: "John Doe"
+            created_at: "2025-05-31T10:00:00Z"
+            updated_at: "2025-05-31T10:00:00Z"
+        admin_user:
+          summary: Admin User Example
+          description: Example of an admin account (email contains 'admin')
+          value:
+            id: "a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+            email: "admin@example.com"
+            password: "$2b$10$hashedpassword"
+            name: "Admin User"
+            created_at: "2025-05-31T10:00:00Z"
+            updated_at: "2025-05-31T10:00:00Z"
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Create a new user account (Customer or Admin)
+      description: |
+        Register a new user account. This endpoint can create both **customer accounts** and **admin accounts**.
+        
+        **Customer Account Registration:**
+        - Use regular email addresses (e.g., `user1@example.com`, `customer@example.com`)
+        - These accounts are for customers to browse products, manage cart, and create orders
+        - For testing, use randomly generated emails to avoid conflicts: `user-{timestamp}@example.com` or `test-{uuid}@test.com`
+        
+        **Admin Account Registration:**
+        - Use an email containing 'admin' (case-insensitive) to automatically grant admin privileges
+        - Examples: `admin@example.com`, `admin.user@example.com`, `superadmin@example.com`
+        - Alternatively, add the email to ADMIN_EMAILS environment variable after registration
+        - Admin accounts can access all customer endpoints PLUS admin endpoints for order processing
+        
+        **Important Notes:**
+        - The email must be unique - duplicate emails will return a 409 conflict error
+        - Password will be hashed using bcrypt before storage
+        - Upon successful registration, you'll receive a JWT token valid for 7 days
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: |
+                    Unique email address. 
+                    - For customer accounts: Use regular emails (e.g., `user1@example.com`, `customer@example.com`)
+                    - For admin accounts: Use email containing 'admin' (e.g., `admin@example.com`, `admin.user@example.com`)
+                password:
+                  type: string
+                  format: password
+                  description: Password will be hashed using bcrypt before storage. Minimum length recommended.
+                name:
+                  type: string
+                  description: Optional display name for the user
+            examples:
+              customer_account:
+                summary: Customer Account Registration
+                description: Register a regular customer account for shopping and order creation
+                value:
+                  email: "user1@example.com"
+                  password: "password123"
+                  name: "John Doe"
+              admin_account:
+                summary: Admin Account Registration
+                description: Register an admin account (email contains 'admin' for automatic admin privileges)
+                value:
+                  email: "admin@example.com"
+                  password: "admin123"
+                  name: "Admin User"
+      responses:
+        '201':
+          description: User created successfully. Returns user object and JWT token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User created"
+                  user:
+                    $ref: '#/components/schemas/User'
+                  token:
+                    type: string
+                    description: JWT access token (valid for 7 days)
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '400':
+          description: Invalid input - email format invalid or missing required fields
+        '409':
+          description: Conflict - email already registered
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login and get access token (User or Admin)
+      description: |
+        Authenticate with email and password to receive a JWT access token. This endpoint supports both **user login** and **admin login**.
+        
+        **User Login (Customer):**
+        - Use customer account credentials (e.g., `user1@example.com`)
+        - Returns a JWT token for accessing customer endpoints (Products, Cart, Checkout, Orders, Addresses)
+        - Use this token to browse products, manage cart, create orders, and view your own orders
+        
+        **Admin Login (Administrator):**
+        - Use admin account credentials (email containing 'admin' or listed in ADMIN_EMAILS)
+        - Returns a JWT token with admin privileges
+        - Use this token to access ALL customer endpoints PLUS admin endpoints (`/admin/*`)
+        - Admin endpoints allow order processing and status updates
+        
+        **Important Notes:**
+        - Token expires in 7 days
+        - Include token in Authorization header as `Bearer {token}` for protected endpoints
+        - The same login endpoint is used for both user and admin - the role is determined by the email address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: |
+                    Email address of registered user or admin.
+                    - For customer login: Use customer email (e.g., `user1@example.com`)
+                    - For admin login: Use admin email containing 'admin' (e.g., `admin@example.com`)
+                password:
+                  type: string
+                  format: password
+                  description: User's password (plain text, will be verified against hashed password)
+            examples:
+              user_login:
+                summary: Customer Login
+                description: Login as a regular customer to access shopping and order creation features
+                value:
+                  email: "user1@example.com"
+                  password: "password1"
+              admin_login:
+                summary: Admin Login
+                description: Login as an administrator to access order processing and management features
+                value:
+                  email: "admin@example.com"
+                  password: "admin123"
+      responses:
+        '200':
+          description: Authenticated successfully. Returns JWT token and user object.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT access token (valid for 7 days, use in Authorization header)
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized - invalid email or password
+  /products:
+    get:
+      tags:
+        - Products
+      summary: List all products with filters
+      description: |
+        Retrieve a list of all available products. Supports optional filtering by category, search term, and price range.
+        **Note:** Available categories include: books, wellness, electronics, clothing, home, sports, accessories.
+        All query parameters are optional - omit them to get all products.
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Filter by product category (e.g., 'books', 'electronics', 'wellness', 'clothing', 'home', 'sports', 'accessories')
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search products by name or description (case-insensitive partial match)
+        - name: min_price
+          in: query
+          schema:
+            type: number
+          description: Minimum price filter (inclusive)
+        - name: max_price
+          in: query
+          schema:
+            type: number
+          description: Maximum price filter (inclusive)
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+              example:
+                - id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+                  name: "Worry Management"
+                  description: "A book to help manage stress."
+                  price: 91.37
+                  category: "books"
+                  image_url: "https://dummyimage.com/766x809"
+                  stock: 94
+                  created_at: "2025-05-31T10:00:00Z"
+                  updated_at: "2025-05-31T10:00:00Z"
+  /products/{id}:
+    get:
+      tags:
+        - Products
+      summary: Get product details by ID
+      description: |
+        Retrieve detailed information about a specific product by its UUID.
+        **Note:** Use a valid product UUID from the products list. Returns 404 if product doesn't exist.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID (get from /products endpoint)
+          example: d412f63a-863b-45aa-abe6-0a71c29d635b
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+              example:
+                id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+                name: "Worry Management"
+                description: "A book to help manage stress."
+                price: 91.37
+                category: "books"
+                image_url: "https://dummyimage.com/766x809"
+                stock: 94
+                created_at: "2025-05-31T10:00:00Z"
+                updated_at: "2025-05-31T10:00:00Z"
+  /cart:
+    get:
+      tags:
+        - Cart
+      summary: Get current user's cart
+      description: |
+        Retrieve all items in the authenticated user's shopping cart.
+        **Note:** Requires authentication. Returns cart items with product details included.
+        Empty cart returns an empty array.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Your cart items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CartItem'
+              example:
+                - id: "c1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+                  quantity: 2
+  /cart/items:
+    post:
+      tags:
+        - Cart
+      summary: Add item to cart
+      description: |
+        Add a product to the authenticated user's shopping cart.
+        **Note:** 
+        - Requires authentication (Bearer token)
+        - If the product already exists in cart, the quantity will be increased by the specified amount
+        - Use a valid product_id from the /products endpoint
+        - Minimum quantity is 1
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartItem'
+            example:
+              product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+              quantity: 2
+      responses:
+        '200':
+          description: Item added to cart successfully. Returns updated cart with all items.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Item added to cart"
+                  cart:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CartItem'
+        '400':
+          description: Bad request - invalid product_id or quantity
+        '401':
+          description: Unauthorized - authentication required
+  /checkout:
+    post:
+      tags:
+        - Checkout
+      summary: Checkout and place order (Customer)
+      description: |
+        Process checkout and create an order from the user's cart items. This is the **primary endpoint for order creation**.
+        
+        **Requires User Login (Customer):**
+        - Login using `/auth/login` with a customer account (e.g., `user1@example.com`)
+        - Use the customer bearer token in the Authorization header
+        - This endpoint is part of the customer workflow: Browse → Add to Cart → Checkout → Order Created
+        
+        **Important Notes:**
+        - Requires authentication (Bearer token from customer login)
+        - Cart must not be empty - returns 400 if cart is empty
+        - Use a valid address_id from the user's saved addresses (/addresses endpoint)
+        - Order is created with status `pending` - admins will process it using `/admin/orders/{orderId}/status`
+        - payment_method_id is currently accepted but not validated (for future payment integration)
+        - Cart will be cleared after successful checkout
+        - Order total is calculated automatically from cart items
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address_id, payment_method_id]
+              properties:
+                address_id:
+                  type: string
+                  format: uuid
+                  description: UUID of a saved address from /addresses endpoint (must belong to authenticated user)
+                  example: "a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                payment_method_id:
+                  type: string
+                  description: Payment method identifier (currently accepted but not validated)
+                  example: "p1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+            example:
+              address_id: "a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+              payment_method_id: "p1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                id: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                items:
+                  - id: "c1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                    user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                    product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+                    quantity: 2
+                total_amount: 182.74
+                status: "pending"
+                created_at: "2025-05-31T10:00:00Z"
+                updated_at: "2025-05-31T10:00:00Z"
+  /orders:
+    get:
+      tags:
+        - Orders
+      summary: List your past orders
+      description: |
+        Retrieve order history for the authenticated user.
+        **Note:** 
+        - Requires authentication (Bearer token)
+        - Returns only orders belonging to the authenticated user
+        - Orders include order items with product details
+        - Empty order history returns an empty array
+        - Optional status filter: `?status=pending` to filter by order status
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, invoiced, dispatched, in_transit, out_for_delivery, delivered]
+          description: Filter orders by status (optional)
+      responses:
+        '200':
+          description: Order history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+              example:
+                - id: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  items:
+                    - id: "c1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                      user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                      product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+                      quantity: 2
+                  total_amount: 182.74
+                  status: "pending"
+                  created_at: "2025-05-31T10:00:00Z"
+                  updated_at: "2025-05-31T10:00:00Z"
+  /orders/{orderId}:
+    get:
+      tags:
+        - Orders
+      summary: Get order details
+      description: |
+        Retrieve detailed information about a specific order.
+        **Note:**
+        - Requires authentication (Bearer token)
+        - Can only access orders belonging to the authenticated user
+        - Returns 404 if order doesn't exist or doesn't belong to the user
+        - Order includes full product details for each item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Order UUID (get from /orders endpoint)
+      responses:
+        '200':
+          description: Order detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                id: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                items:
+                  - id: "c1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                    user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                    product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+                    quantity: 2
+                total_amount: 182.74
+                status: "pending"
+                created_at: "2025-05-31T10:00:00Z"
+                updated_at: "2025-05-31T10:00:00Z"
+  /orders/{orderId}/history:
+    get:
+      tags:
+        - Orders
+      summary: Get order status history
+      description: |
+        Retrieve the complete status change history for a specific order.
+        **Note:**
+        - Requires authentication (Bearer token)
+        - Users can only view history of their own orders
+        - Admins can view history of any order
+        - Returns array of status changes ordered by most recent first
+        - Each history entry includes old_status, new_status, changed_by, notes, and timestamp
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Order UUID
+      responses:
+        '200':
+          description: Order status history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderStatusHistory'
+              example:
+                - id: "h1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  order_id: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  old_status: "pending"
+                  new_status: "invoiced"
+                  changed_by: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  notes: "Invoice generated"
+                  created_at: "2025-05-31T11:00:00Z"
+        '403':
+          description: Forbidden - cannot access this order's history
+        '404':
+          description: Order not found
+  /admin/orders:
+    get:
+      tags:
+        - Admin
+      summary: List all orders (Admin only)
+      description: |
+        Retrieve all orders in the system with pagination and optional status filtering.
+        
+        **Requires Admin Login:**
+        - You must login using `/auth/login` with an admin account (email containing 'admin' or listed in ADMIN_EMAILS)
+        - Use the admin bearer token in the Authorization header
+        - Sample admin emails: `admin@example.com`, `admin.user@example.com`
+        
+        **Note:**
+        - Returns paginated results with total count and page information
+        - Includes order items, products, and user information
+        - Use query parameters to filter by status and paginate
+        - This endpoint is part of the admin workflow for order processing
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, invoiced, dispatched, in_transit, out_for_delivery, delivered]
+          description: Filter orders by status (optional)
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number (1-based)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Number of orders per page
+      responses:
+        '200':
+          description: Paginated list of all orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                        example: 50
+                      page:
+                        type: integer
+                        example: 1
+                      limit:
+                        type: integer
+                        example: 10
+                      totalPages:
+                        type: integer
+                        example: 5
+        '403':
+          description: Forbidden - admin access required
+  /admin/orders/{orderId}/status:
+    patch:
+      tags:
+        - Admin
+      summary: Update order status (Admin only)
+      description: |
+        Update the status of an order following the strict sequential flow. This is the **primary admin endpoint** for order processing.
+        
+        **Requires Admin Login:**
+        - You must login using `/auth/login` with an admin account
+        - Sample admin credentials: `admin@example.com` / `admin123`
+        - Use the admin bearer token in the Authorization header
+        - Regular customer accounts cannot access this endpoint
+        
+        **Order Status Workflow:**
+        The status transitions must follow this strict sequence:
+        1. `pending` (order created by customer)
+        2. `invoiced` (admin generates invoice)
+        3. `dispatched` (order shipped from warehouse)
+        4. `in_transit` (order in transit to customer)
+        5. `out_for_delivery` (order out for final delivery)
+        6. `delivered` (order delivered to customer)
+        
+        **Important Notes:**
+        - Status transitions must follow the sequence above - skipping steps will return 400 error
+        - Invalid transitions (e.g., pending → delivered) will return 400 error with valid next statuses
+        - Timestamp fields are automatically set based on the new status (e.g., `invoiced_at`, `dispatched_at`)
+        - Provide `invoice_number` when status is 'invoiced'
+        - Provide `tracking_number` when status is 'dispatched'
+        - A status history record is automatically created for audit trail
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Order UUID to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [invoiced, dispatched, in_transit, out_for_delivery, delivered]
+                  description: New status (must be a valid next status in the sequence)
+                invoice_number:
+                  type: string
+                  description: Optional invoice number (typically set when status is 'invoiced')
+                  example: "INV-2025-001"
+                tracking_number:
+                  type: string
+                  description: Optional tracking number (typically set when status is 'dispatched')
+                  example: "TRACK123456789"
+                notes:
+                  type: string
+                  description: Optional admin notes about the status change
+                  example: "Invoice generated and sent to customer"
+            example:
+              status: "invoiced"
+              invoice_number: "INV-2025-001"
+              notes: "Invoice generated"
+      responses:
+        '200':
+          description: Order updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                id: "o1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                total_amount: 182.74
+                status: "invoiced"
+                invoice_number: "INV-2025-001"
+                invoiced_at: "2025-05-31T11:00:00Z"
+                created_at: "2025-05-31T10:00:00Z"
+                updated_at: "2025-05-31T11:00:00Z"
+        '400':
+          description: Bad request - invalid status or invalid status transition
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Invalid status transition"
+                  currentStatus:
+                    type: string
+                    example: "pending"
+                  attemptedStatus:
+                    type: string
+                    example: "delivered"
+                  validNextStatuses:
+                    type: array
+                    items:
+                      type: string
+                    example: ["invoiced"]
+        '403':
+          description: Forbidden - admin access required
+        '404':
+          description: Order not found
+  /admin/orders/{orderId}/history:
+    get:
+      tags:
+        - Admin
+      summary: Get order status history (Admin or order owner)
+      description: |
+        Retrieve the complete status change history for a specific order.
+        
+        **Access Control:**
+        - **Admin Login Required**: Admins can view history of any order
+          - Login with admin account (e.g., `admin@example.com`)
+          - Use admin bearer token in Authorization header
+        - **Customer Access**: Regular users can only view history of their own orders
+          - Login with customer account (e.g., `user1@example.com`)
+          - Use customer bearer token in Authorization header
+        
+        **Note:**
+        - Returns array of status changes ordered by most recent first
+        - Each history entry includes old_status, new_status, changed_by, notes, and timestamp
+        - Useful for tracking order processing workflow and audit purposes
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Order UUID
+      responses:
+        '200':
+          description: Order status history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderStatusHistory'
+        '403':
+          description: Forbidden - cannot access this order's history
+        '404':
+          description: Order not found
+  /addresses:
+    get:
+      tags:
+        - Addresses
+      summary: Get your saved addresses
+      description: |
+        Retrieve all saved addresses for the authenticated user.
+        **Note:**
+        - Requires authentication (Bearer token)
+        - Returns only addresses belonging to the authenticated user
+        - Empty address list returns an empty array
+        - Addresses are needed for checkout (use address_id in /checkout endpoint)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of saved addresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Address'
+              example:
+                - id: "a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+                  line1: "123 Main St"
+                  line2: "Apt 4B"
+                  city: "Springfield"
+                  state: "IL"
+                  postal_code: "62701"
+                  country: "USA"
+                  created_at: "2025-05-31T10:00:00Z"
+                  updated_at: "2025-05-31T10:00:00Z"
+    post:
+      tags:
+        - Addresses
+      summary: Add a new address
+      description: |
+        Add a new shipping address for the authenticated user.
+        **Note:**
+        - Requires authentication (Bearer token)
+        - Address is automatically associated with the authenticated user
+        - line2 (apartment/suite) is optional
+        - Use this address_id in the /checkout endpoint
+        - All other fields are required
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Address'
+            example:
+              line1: "123 Main St"
+              line2: "Apt 4B"
+              city: "Springfield"
+              state: "IL"
+              postal_code: "62701"
+              country: "USA"
+      responses:
+        '201':
+          description: Address added successfully. Returns the created address object with generated UUID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Address'
+        '400':
+          description: Bad request - missing required fields
+        '401':
+          description: Unauthorized - authentication required
