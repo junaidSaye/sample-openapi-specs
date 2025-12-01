@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: E-commerce API
-  version: 1.1.0
+  version: 1.2.0
   description: |
-    This is a realistic e-commerce API.
+    This is a realistic e-commerce API with product reviews, wishlist, and enhanced search capabilities.
     
 servers:
   - url: https://api.ratl.app/ecommerce
@@ -30,6 +30,10 @@ tags:
     description: Order management and history
   - name: Addresses
     description: Shipping address management
+  - name: Reviews
+    description: Product reviews and ratings management
+  - name: Wishlist
+    description: User wishlist management for saving favorite products
   - name: Admin
     description: |
       Administrative endpoints for order management and processing.
@@ -73,6 +77,17 @@ components:
         stock:
           type: integer
           example: 94
+        average_rating:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 5
+          description: Average rating from all reviews (0-5 scale)
+          example: 4.5
+        review_count:
+          type: integer
+          description: Total number of reviews for this product
+          example: 23
         created_at:
           type: string
           format: date-time
@@ -89,6 +104,8 @@ components:
         category: "books"
         image_url: "https://dummyimage.com/766x809"
         stock: 94
+        average_rating: 4.5
+        review_count: 23
         created_at: "2025-05-31T10:00:00Z"
         updated_at: "2025-05-31T10:00:00Z"
     CartItem:
@@ -347,8 +364,83 @@ components:
             email: "admin@example.com"
             password: "$2b$10$hashedpassword"
             name: "Admin User"
-            created_at: "2025-05-31T10:00:00Z"
-            updated_at: "2025-05-31T10:00:00Z"
+        created_at: "2025-05-31T10:00:00Z"
+        updated_at: "2025-05-31T10:00:00Z"
+    Review:
+      type: object
+      required: [id, product_id, user_id, rating, comment]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "r1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        product_id:
+          type: string
+          format: uuid
+          example: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+        user_id:
+          type: string
+          format: uuid
+          example: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Rating from 1 (poor) to 5 (excellent)
+          example: 5
+        comment:
+          type: string
+          description: Review text comment
+          example: "Excellent product! Highly recommend."
+        user_name:
+          type: string
+          description: Name of the user who wrote the review
+          example: "John Doe"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+      example:
+        id: "r1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+        user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        rating: 5
+        comment: "Excellent product! Highly recommend."
+        user_name: "John Doe"
+        created_at: "2025-05-31T10:00:00Z"
+        updated_at: "2025-05-31T10:00:00Z"
+    WishlistItem:
+      type: object
+      required: [id, user_id, product_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "w1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        user_id:
+          type: string
+          format: uuid
+          example: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        product_id:
+          type: string
+          format: uuid
+          example: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+        product:
+          $ref: '#/components/schemas/Product'
+          description: Full product details (included when fetching wishlist)
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-05-31T10:00:00Z"
+      example:
+        id: "w1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        user_id: "u1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        product_id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+        created_at: "2025-05-31T10:00:00Z"
 paths:
   /auth/register:
     post:
@@ -506,11 +598,11 @@ paths:
     get:
       tags:
         - Products
-      summary: List all products with filters
+      summary: List all products with filters, pagination, and sorting
       description: |
-        Retrieve a list of all available products. Supports optional filtering by category, search term, and price range.
+        Retrieve a paginated list of all available products. Supports optional filtering by category, search term, price range, sorting, and pagination.
         **Note:** Available categories include: books, wellness, electronics, clothing, home, sports, accessories.
-        All query parameters are optional - omit them to get all products.
+        All query parameters are optional - omit them to get all products with default pagination.
       parameters:
         - name: category
           in: query
@@ -532,25 +624,76 @@ paths:
           schema:
             type: number
           description: Maximum price filter (inclusive)
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [price_asc, price_desc, name_asc, name_desc, rating_desc, newest]
+          description: Sort order (price_asc, price_desc, name_asc, name_desc, rating_desc, newest)
+          example: price_asc
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number for pagination
+          example: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of items per page (max 100)
+          example: 20
       responses:
         '200':
-          description: List of products
+          description: Paginated list of products
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Product'
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                        example: 1
+                      limit:
+                        type: integer
+                        example: 20
+                      total:
+                        type: integer
+                        description: Total number of products matching filters
+                        example: 45
+                      total_pages:
+                        type: integer
+                        example: 3
               example:
-                - id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
-                  name: "Worry Management"
-                  description: "A book to help manage stress."
-                  price: 91.37
-                  category: "books"
-                  image_url: "https://dummyimage.com/766x809"
-                  stock: 94
-                  created_at: "2025-05-31T10:00:00Z"
-                  updated_at: "2025-05-31T10:00:00Z"
+                products:
+                  - id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+                    name: "Worry Management"
+                    description: "A book to help manage stress."
+                    price: 91.37
+                    category: "books"
+                    image_url: "https://dummyimage.com/766x809"
+                    stock: 94
+                    average_rating: 4.5
+                    review_count: 23
+                    created_at: "2025-05-31T10:00:00Z"
+                    updated_at: "2025-05-31T10:00:00Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 45
+                  total_pages: 3
   /products/{id}:
     get:
       tags:
@@ -583,8 +726,248 @@ paths:
                 category: "books"
                 image_url: "https://dummyimage.com/766x809"
                 stock: 94
+                average_rating: 4.5
+                review_count: 23
                 created_at: "2025-05-31T10:00:00Z"
                 updated_at: "2025-05-31T10:00:00Z"
+  /products/search:
+    get:
+      tags:
+        - Products
+      summary: Advanced product search
+      description: |
+        Perform advanced full-text search across product names, descriptions, and categories.
+        This endpoint provides more sophisticated search capabilities than the basic search parameter in /products.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query string
+          example: "stress management book"
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Filter by category
+        - name: min_rating
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 5
+          description: Minimum average rating filter
+          example: 4.0
+        - name: in_stock
+          in: query
+          schema:
+            type: boolean
+          description: Filter only products in stock
+          example: true
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  total:
+                    type: integer
+                    example: 5
+              example:
+                results:
+                  - id: "d412f63a-863b-45aa-abe6-0a71c29d635b"
+                    name: "Worry Management"
+                    description: "A book to help manage stress."
+                    price: 91.37
+                    category: "books"
+                    image_url: "https://dummyimage.com/766x809"
+                    stock: 94
+                    average_rating: 4.5
+                    review_count: 23
+                    created_at: "2025-05-31T10:00:00Z"
+                    updated_at: "2025-05-31T10:00:00Z"
+                total: 5
+  /products/{id}/reviews:
+    get:
+      tags:
+        - Reviews
+      summary: Get reviews for a product
+      description: Retrieve all reviews for a specific product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID
+          example: d412f63a-863b-45aa-abe6-0a71c29d635b
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Number of reviews per page
+      responses:
+        '200':
+          description: List of reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reviews:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Review'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+        '404':
+          description: Product not found
+    post:
+      tags:
+        - Reviews
+      summary: Create a review for a product
+      description: Add a new review and rating for a product. Requires authentication.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating, comment]
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Rating from 1 to 5
+                  example: 5
+                comment:
+                  type: string
+                  description: Review comment text
+                  example: "Excellent product! Highly recommend."
+      responses:
+        '201':
+          description: Review created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '400':
+          description: Invalid input (rating out of range, missing fields)
+        '401':
+          description: Unauthorized - authentication required
+        '404':
+          description: Product not found
+  /wishlist:
+    get:
+      tags:
+        - Wishlist
+      summary: Get user's wishlist
+      description: Retrieve all items in the authenticated user's wishlist
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of wishlist items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WishlistItem'
+        '401':
+          description: Unauthorized - authentication required
+    post:
+      tags:
+        - Wishlist
+      summary: Add product to wishlist
+      description: Add a product to the authenticated user's wishlist
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id]
+              properties:
+                product_id:
+                  type: string
+                  format: uuid
+                  description: Product UUID to add to wishlist
+                  example: d412f63a-863b-45aa-abe6-0a71c29d635b
+      responses:
+        '201':
+          description: Product added to wishlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WishlistItem'
+        '400':
+          description: Product already in wishlist or invalid product_id
+        '401':
+          description: Unauthorized - authentication required
+        '404':
+          description: Product not found
+  /wishlist/{product_id}:
+    delete:
+      tags:
+        - Wishlist
+      summary: Remove product from wishlist
+      description: Remove a product from the authenticated user's wishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID to remove from wishlist
+      responses:
+        '200':
+          description: Product removed from wishlist successfully
+        '401':
+          description: Unauthorized - authentication required
+        '404':
+          description: Product not found in wishlist
   /cart:
     get:
       tags:
